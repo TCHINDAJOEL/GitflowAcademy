@@ -1,0 +1,1016 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Plus, GitMerge, AlertCircle, CheckCircle, 
+  Save, RotateCcw, Tag, Trash2, BookOpen, Info, Bug,
+  Terminal, Code, GitBranch, ArrowRight, ChevronDown, Github, XCircle, ShieldAlert,
+  GitCommit, AlertTriangle, Layers, FastForward, CheckSquare, Zap, Users, GitPullRequest, Server
+} from 'lucide-react';
+
+// --- CONFIGURATION LAB STANDARD ---
+const BRANCHES_STD = {
+  main: {  y: 60, color: '#ef4444', label: 'Main', desc: 'Production Stable' },
+  hotfix: { y: 130, color: '#f97316', label: 'Hotfix', desc: 'Correction urgente' },
+  release: { y: 200, color: '#22c55e', label: 'Release', desc: 'Préparation version' },
+  develop: { y: 270, color: '#3b82f6', label: 'Develop', desc: 'Intégration continue' },
+  feature: { y: 340, color: '#d8b4fe', label: 'Feature', desc: 'Nouvelles fonctions' },
+};
+
+const GUIDES_STD = {
+  init: "1. Branche Principale (Main) : Contient uniquement du code stable, prêt pour la production.\n2. Branche de Développement (Develop) : C'est la branche d'intégration pour tout le travail en cours.",
+  feature: "3. Feature Branch : Le développement des nouvelles fonctionnalités OU les corrections de bogues se déroulent ici. Une fois terminé et testé, on fusionne dans 'develop'.",
+  release: "4. Release Branch : Créée pour préparer la production. C'est ici que les corrections de bogues et ajustements mineurs finaux sont effectués (Stabilisation). Une fois finalisée, elle part dans 'main' et 'develop'.",
+  hotfix: "5. Hotfix : Pour les correctifs urgents APRES déploiement. Une période de stabilisation peut suivre un grand déploiement, nécessitant ces patchs rapides. Fusionnés vers 'main' et 'develop'."
+};
+
+// --- COMPOSANT LAB STANDARD ---
+const StandardGitflowVisualizer = () => {
+  const [commits, setCommits] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [activeBranches, setActiveBranches] = useState({ feature: false, release: false, hotfix: false });
+  const [currentVersion, setCurrentVersion] = useState({ major: 0, minor: 1, patch: 0 });
+  const [activeGuide, setActiveGuide] = useState(GUIDES_STD.init);
+  const scrollRef = useRef(null);
+  const commitsRef = useRef([]);
+  const timeRef = useRef(0);
+  const [time, setTime] = useState(0); 
+
+  useEffect(() => { resetSimulation(); }, []);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth; }, [commits]);
+
+  const formatVersion = (v) => `v${v.major}.${v.minor}.${v.patch}`;
+  const parseVersion = (tag) => {
+    const match = tag.match(/v(\d+)\.(\d+)\.(\d+)/);
+    if (match) return { major: parseInt(match[1]), minor: parseInt(match[2]), patch: parseInt(match[3]) };
+    return { major: 0, minor: 1, patch: 0 };
+  };
+
+  const recalculateState = (commitList) => {
+    const newActive = { feature: false, release: false, hotfix: false };
+    let lastTag = 'v0.1.0';
+    commitList.forEach(c => {
+      if (c.type === 'start') {
+        if (c.branch === 'feature') newActive.feature = true;
+        if (c.branch === 'release') newActive.release = true;
+        if (c.branch === 'hotfix') newActive.hotfix = true;
+      } else if (c.type === 'merge') {
+        const sourceParent = commitList.find(p => p.id === c.secondaryParentId);
+        if (sourceParent) {
+          if (sourceParent.branch === 'feature') newActive.feature = false;
+          if (sourceParent.branch === 'release') newActive.release = false;
+          if (sourceParent.branch === 'hotfix') newActive.hotfix = false;
+        }
+      }
+      if (c.tag) lastTag = c.tag;
+    });
+    setActiveBranches(newActive);
+    setCurrentVersion(parseVersion(lastTag));
+    commitsRef.current = commitList;
+    if (commitList.length > 0) {
+      const lastTime = commitList[commitList.length - 1].x;
+      setTime(lastTime);
+      timeRef.current = lastTime;
+    } else {
+      setTime(50);
+      timeRef.current = 50;
+    }
+    if (newActive.hotfix) setActiveGuide(GUIDES_STD.hotfix);
+    else if (newActive.release) setActiveGuide(GUIDES_STD.release);
+    else if (newActive.feature) setActiveGuide(GUIDES_STD.feature);
+    else setActiveGuide(GUIDES_STD.init);
+  };
+
+  const addMessage = (text) => setMessages(prev => [{ id: Date.now() + Math.random(), text }, ...prev].slice(0, 5));
+
+  const createCommit = (branch, type, mergeSourceId = null, tag = null) => {
+    const newTime = timeRef.current + 60;
+    timeRef.current = newTime;
+    setTime(newTime);
+    const lastOnBranch = commitsRef.current.filter(c => c.branch === branch).pop();
+    let parentId = null;
+    let secondaryParentId = null;
+    if (type === 'merge') {
+      parentId = lastOnBranch ? lastOnBranch.id : null; 
+      secondaryParentId = mergeSourceId; 
+    } else {
+      parentId = type === 'start' ? mergeSourceId : (lastOnBranch ? lastOnBranch.id : null);
+    }
+    const newCommit = {
+      id: Date.now() + Math.random(), 
+      branch, x: newTime, y: BRANCHES_STD[branch].y,
+      type, parentId, secondaryParentId, tag,
+      color: BRANCHES_STD[branch].color
+    };
+    const newCommitsList = [...commitsRef.current, newCommit];
+    commitsRef.current = newCommitsList;
+    setCommits(newCommitsList);
+    if (tag) setCurrentVersion(parseVersion(tag));
+    return newCommit;
+  };
+
+  const resetSimulation = () => {
+    const initMain = { id: 1, branch: 'main', x: 50, y: BRANCHES_STD.main.y, type: 'init', color: BRANCHES_STD.main.color, tag: 'v0.1.0', parentId: null };
+    const initDev = { id: 2, branch: 'develop', x: 50, y: BRANCHES_STD.develop.y, type: 'init', color: BRANCHES_STD.develop.color, parentId: 1 };
+    const initialCommits = [initMain, initDev];
+    setCommits(initialCommits);
+    recalculateState(initialCommits);
+    setMessages([{ id: Date.now(), text: "Projet initialisé. HEAD sur Develop." }]);
+    setActiveGuide(GUIDES_STD.init);
+  };
+
+  const handleUndo = () => {
+    if (commits.length <= 2) return;
+    const newCommits = commits.slice(0, -1);
+    setCommits(newCommits);
+    recalculateState(newCommits);
+    addMessage("Action annulée");
+  };
+
+  const handleStartFeature = () => {
+    if (activeBranches.feature) return;
+    setActiveBranches(prev => ({ ...prev, feature: true }));
+    setActiveGuide(GUIDES_STD.feature);
+    const lastDev = commitsRef.current.filter(c => c.branch === 'develop').pop();
+    createCommit('feature', 'start', lastDev.id);
+    addMessage("git checkout -b feature/xxx develop");
+  };
+  const handleCommitFeature = () => {
+    if (!activeBranches.feature) return;
+    createCommit('feature', 'commit');
+    addMessage("git commit -m 'Dev feature'");
+  };
+  const handleFinishFeature = () => {
+    if (!activeBranches.feature) return;
+    const lastFeature = commitsRef.current.filter(c => c.branch === 'feature').pop();
+    createCommit('develop', 'merge', lastFeature.id);
+    setActiveBranches(prev => ({ ...prev, feature: false }));
+    setActiveGuide(GUIDES_STD.init);
+    addMessage("git checkout develop && git merge feature/xxx");
+  };
+
+  const handleStartRelease = () => {
+    if (activeBranches.release) return;
+    setActiveBranches(prev => ({ ...prev, release: true }));
+    setActiveGuide(GUIDES_STD.release);
+    const lastDev = commitsRef.current.filter(c => c.branch === 'develop').pop();
+    const nextVer = { ...currentVersion, minor: currentVersion.minor + 1, patch: 0 };
+    createCommit('release', 'start', lastDev.id, `RC-${formatVersion(nextVer)}`);
+    addMessage(`git checkout -b release/${formatVersion(nextVer)} develop`);
+  };
+  const handleCommitRelease = () => {
+    if (!activeBranches.release) return;
+    createCommit('release', 'commit');
+    addMessage("git commit -m 'Fix bug sur Release'");
+  };
+  const handleFinishRelease = () => {
+    if (!activeBranches.release) return;
+    const lastRelease = commitsRef.current.filter(c => c.branch === 'release').pop();
+    const nextVer = { ...currentVersion, minor: currentVersion.minor + 1, patch: 0 };
+    const tag = formatVersion(nextVer);
+    createCommit('main', 'merge', lastRelease.id, tag);
+    createCommit('develop', 'merge', lastRelease.id);
+    setActiveBranches(prev => ({ ...prev, release: false }));
+    setActiveGuide(GUIDES_STD.init);
+    addMessage(`git checkout main && git merge release...`);
+  };
+
+  const handleStartHotfix = () => {
+    if (activeBranches.hotfix) return;
+    setActiveBranches(prev => ({ ...prev, hotfix: true }));
+    setActiveGuide(GUIDES_STD.hotfix);
+    const lastMain = commitsRef.current.filter(c => c.branch === 'main').pop();
+    createCommit('hotfix', 'start', lastMain.id);
+    addMessage("git checkout -b hotfix/urgent main");
+  };
+  const handleCommitHotfix = () => {
+    if (!activeBranches.hotfix) return;
+    createCommit('hotfix', 'commit');
+    addMessage("git commit -m 'Patch appliqué'");
+  };
+  const handleFinishHotfix = () => {
+    if (!activeBranches.hotfix) return;
+    const lastHotfix = commitsRef.current.filter(c => c.branch === 'hotfix').pop();
+    const nextVer = { ...currentVersion, patch: currentVersion.patch + 1 };
+    const tag = formatVersion(nextVer);
+    createCommit('main', 'merge', lastHotfix.id, tag);
+    createCommit('develop', 'merge', lastHotfix.id);
+    setActiveBranches(prev => ({ ...prev, hotfix: false }));
+    setActiveGuide(GUIDES_STD.init);
+    addMessage(`Hotfix déployé. Tag ${tag} créé.`);
+  };
+
+  const renderLine = (startCommit, endCommitId, isSecondary = false) => {
+    const endCommit = commits.find(c => c.id === endCommitId);
+    if (!endCommit) return null;
+    const isStraight = startCommit.y === endCommit.y;
+    const pathData = isStraight
+      ? `M ${endCommit.x} ${endCommit.y} L ${startCommit.x} ${startCommit.y}`
+      : `M ${endCommit.x} ${endCommit.y} C ${endCommit.x + 30} ${endCommit.y}, ${startCommit.x - 30} ${startCommit.y}, ${startCommit.x} ${startCommit.y}`;
+    return (
+      <path
+        key={`line-${startCommit.id}-${endCommit.id}`}
+        d={pathData}
+        stroke={isSecondary ? endCommit.color : startCommit.color} 
+        strokeWidth={isSecondary ? "2" : "3"}
+        strokeDasharray={isSecondary && !isStraight ? "4,4" : "0"} 
+        fill="none"
+        opacity={isSecondary ? "0.6" : "0.8"}
+      />
+    );
+  };
+
+  const handleResetToCommit = (commitId) => {
+    const index = commits.findIndex(c => c.id === commitId);
+    if (index === -1) return;
+    const newCommits = commits.slice(0, index + 1);
+    setCommits(newCommits);
+    recalculateState(newCommits);
+    addMessage(`Reset vers commit ${commitId.toString().slice(-4)}`);
+  };
+
+  return (
+    <div className="flex flex-col w-full bg-slate-900 rounded-xl shadow-2xl overflow-hidden border border-slate-700 font-sans text-slate-200">
+      <div className="bg-slate-950 p-4 flex justify-between items-center border-b border-slate-800">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-indigo-400">
+            <Terminal size={20} />
+            <span className="font-mono font-bold">Standard Lab</span>
+          </div>
+          <div className="hidden md:flex bg-slate-800 px-3 py-1 rounded-full text-xs font-mono items-center gap-2 border border-slate-700">
+            <Tag size={12} className="text-yellow-400"/>
+            Prod: <span className="text-yellow-400 font-bold">{formatVersion(currentVersion)}</span>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handleUndo} disabled={commits.length <= 2} className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5">
+            <RotateCcw size={12} /> Undo
+          </button>
+          <button onClick={resetSimulation} className="btn-danger text-xs px-3 py-1.5 flex items-center gap-1.5">
+            <Trash2 size={12} /> Reset
+          </button>
+        </div>
+      </div>
+      <div className="bg-slate-800/50 p-3 border-b border-slate-800 flex gap-3 items-start backdrop-blur-sm">
+        <Info size={18} className="text-blue-400 mt-0.5 shrink-0" />
+        <p className="text-blue-200 text-xs md:text-sm font-mono whitespace-pre-line leading-relaxed opacity-90">
+          {activeGuide}
+        </p>
+      </div>
+      <div className="relative h-80 overflow-x-auto bg-[#0f172a] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent" ref={scrollRef}>
+        <svg height="350" width={Math.max(800, time + 100)} className="absolute top-0 left-0 min-w-full">
+          {Object.entries(BRANCHES_STD).map(([key, branch]) => (
+            <g key={key}>
+              <line x1="0" y1={branch.y} x2="10000" y2={branch.y} stroke="#1e293b" strokeWidth="2" />
+              <text x="10" y={branch.y - 10} fill={branch.color} fontSize="10" fontWeight="bold" className="uppercase opacity-70 font-mono">
+                {branch.label}
+              </text>
+            </g>
+          ))}
+          {commits.map(commit => (
+            <React.Fragment key={`lines-${commit.id}`}>
+              {commit.parentId && renderLine(commit, commit.parentId, false)}
+              {commit.secondaryParentId && renderLine(commit, commit.secondaryParentId, true)}
+            </React.Fragment>
+          ))}
+          {commits.map((commit, index) => (
+            <g 
+              key={commit.id} 
+              transform={`translate(${commit.x}, ${commit.y})`}
+              onClick={() => handleResetToCommit(commit.id)}
+              className="cursor-pointer hover:opacity-80 transition-all duration-200"
+            >
+              <circle r="15" fill="transparent" />
+              <circle r="6" fill="#0f172a" stroke={commit.color} strokeWidth="2" />
+              {commit.type === 'merge' && <circle r="3" fill={commit.color} />}
+              {index === commits.length - 1 && (
+                <g><circle r="10" fill="none" stroke={commit.color} strokeWidth="1" strokeDasharray="2,2" className="animate-spin-slow opacity-50" /></g>
+              )}
+              {commit.tag && (
+                <g transform="translate(0, -18)">
+                  <rect x="-24" y="-12" width="48" height="16" rx="4" fill="#1e293b" stroke={commit.color} strokeWidth="1"/>
+                  <text x="0" y="-1" textAnchor="middle" fill="#fbbf24" fontSize="9" fontWeight="bold" className="font-mono">{commit.tag}</text>
+                </g>
+              )}
+            </g>
+          ))}
+        </svg>
+      </div>
+      <div className="p-4 md:p-6 bg-slate-900 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Contrôles Standard identiques au code précédent... */}
+        <div className={`control-card ${activeBranches.feature ? 'active border-purple-500/30 bg-purple-500/5' : ''}`}>
+          <div className="card-header text-purple-400"><Plus size={16} /> <span>Features</span></div>
+          <p className="text-xs text-slate-500 mb-3 font-mono">Dev quotidien</p>
+          {!activeBranches.feature ? (
+            <button onClick={handleStartFeature} disabled={activeBranches.release || activeBranches.hotfix} className="btn-primary bg-purple-600 hover:bg-purple-500 disabled:opacity-30">Start Feature</button>
+          ) : (
+            <div className="flex gap-2"><button onClick={handleCommitFeature} className="btn-secondary text-purple-300 border-purple-500/30 hover:bg-purple-500/10 flex-1">Commit</button><button onClick={handleFinishFeature} className="btn-primary bg-purple-600 hover:bg-purple-500 flex-1">Merge</button></div>
+          )}
+        </div>
+        <div className={`control-card ${activeBranches.release ? 'active border-green-500/30 bg-green-500/5' : ''}`}>
+          <div className="card-header text-green-400 justify-between"><div className="flex items-center gap-2"><CheckCircle size={16} /> <span>Release</span></div><span className="text-[10px] font-mono opacity-60">v{currentVersion.major}.{currentVersion.minor + 1}.0</span></div>
+          <p className="text-xs text-slate-500 mb-3 font-mono">Stabilisation</p>
+          {!activeBranches.release ? (
+            <button onClick={handleStartRelease} disabled={activeBranches.feature || activeBranches.hotfix} className="btn-primary bg-green-600 hover:bg-green-500 disabled:opacity-30 disabled:bg-slate-700">Start Release</button>
+          ) : (
+            <div className="flex flex-col gap-2"><button onClick={handleCommitRelease} className="btn-secondary text-green-300 border-green-500/30 hover:bg-green-500/10 w-full flex items-center justify-center gap-2"><Bug size={12}/> Fix Bug</button><button onClick={handleFinishRelease} className="btn-primary bg-green-600 hover:bg-green-500 w-full">Deploy Prod</button></div>
+          )}
+        </div>
+        <div className={`control-card ${activeBranches.hotfix ? 'active border-orange-500/30 bg-orange-500/5' : ''}`}>
+          <div className="card-header text-orange-400 justify-between"><div className="flex items-center gap-2"><AlertCircle size={16} /> <span>Hotfix</span></div><span className="text-[10px] font-mono opacity-60">v{currentVersion.major}.{currentVersion.minor}.{currentVersion.patch + 1}</span></div>
+          <p className="text-xs text-slate-500 mb-3 font-mono">Urgence Prod</p>
+          {!activeBranches.hotfix ? (
+            <button onClick={handleStartHotfix} disabled={activeBranches.release} className="btn-primary bg-orange-600 hover:bg-orange-500 disabled:opacity-30">Start Hotfix</button>
+          ) : (
+            <div className="flex flex-col gap-2"><button onClick={handleCommitHotfix} className="btn-secondary text-orange-300 border-orange-500/30 hover:bg-orange-500/10 w-full flex items-center justify-center gap-2"><Bug size={12}/> Patch</button><button onClick={handleFinishHotfix} className="btn-primary bg-orange-600 hover:bg-orange-500 w-full">Deploy Hotfix</button></div>
+          )}
+        </div>
+      </div>
+      <div className="bg-black p-3 font-mono text-[10px] md:text-xs text-slate-400 border-t border-slate-800 h-32 overflow-y-auto">
+        <div className="space-y-1">{messages.map(msg => (<div key={msg.id} className="flex gap-2"><span className="text-green-500 select-none">$</span><span className="text-slate-300">{msg.text}</span></div>))}</div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * ==========================================
+ * LAB 2: EXPERT GITFLOW VISUALIZER (REFONDU)
+ * ==========================================
+ */
+
+const AdvancedGitflowVisualizer = () => {
+  const [commits, setCommits] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [currentBranchId, setCurrentBranchId] = useState('develop');
+  const [time, setTime] = useState(0);
+  const [messages, setMessages] = useState([]);
+  const [conflictState, setConflictState] = useState(null);
+  const [explanation, setExplanation] = useState({ title: "Prêt", text: "Initialisez le dépôt pour commencer." });
+  const scrollRef = useRef(null);
+
+  const BASE_SLOTS = { main: 60, develop: 350 }; 
+
+  const getBranchColor = (type) => {
+    switch(type) {
+      case 'main': return '#ef4444';
+      case 'hotfix': return '#f97316';
+      case 'release': return '#22c55e';
+      case 'develop': return '#3b82f6';
+      case 'feature': return '#d8b4fe';
+      default: return '#94a3b8';
+    }
+  };
+
+  useEffect(() => { initExpertLab(); }, []);
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth; }, [commits]);
+
+  const addLog = (cmd, desc, guideTitle = "", guideText = "") => {
+    setMessages(prev => [{ id: Date.now() + Math.random(), cmd, desc }, ...prev].slice(0, 10));
+    if (guideTitle) setExplanation({ title: guideTitle, text: guideText });
+  };
+
+  const initExpertLab = () => {
+    const initTime = 50;
+    setTime(initTime);
+    const c1 = { id: 'c1' + Math.random(), x: 50, y: BASE_SLOTS.main, branchId: 'main', color: getBranchColor('main'), type: 'init', tag: 'v1.0.0' };
+    const c2 = { id: 'c2' + Math.random(), x: 50, y: BASE_SLOTS.develop, branchId: 'develop', color: getBranchColor('develop'), type: 'init', parentId: c1.id };
+    setCommits([c1, c2]);
+    setBranches([
+      { id: 'main', name: 'main', type: 'main', headId: c1.id, y: BASE_SLOTS.main },
+      { id: 'develop', name: 'develop', type: 'develop', headId: c2.id, y: BASE_SLOTS.develop }
+    ]);
+    setCurrentBranchId('develop');
+    setMessages([{ id: 1, cmd: 'git init', desc: 'Repo expert initialized' }]);
+    setExplanation({ title: "Mode Expert", text: "Ici, pas de garde-fous. Vous pouvez créer plusieurs releases en parallèle, merger des features entre elles, ou cherry-pick des commits. Attention aux conflits !" });
+  };
+
+  const createBranch = (type) => {
+    const parentBranch = branches.find(b => b.id === currentBranchId);
+    if (!parentBranch) return;
+
+    let newY = 340;
+    const existingTypeCount = branches.filter(b => b.type === type).length;
+    
+    if (type === 'feature') newY = 420 + (existingTypeCount * 60);
+    if (type === 'release') newY = 280 - (existingTypeCount * 40); 
+    if (type === 'hotfix') newY = 130 + (existingTypeCount * 40);
+
+    const branchName = `${type}/${Date.now().toString().slice(-4)}`;
+    const newBranch = { id: branchName + Math.random(), name: branchName, type: type, headId: parentBranch.headId, y: newY };
+
+    setBranches(prev => [...prev, newBranch]);
+    setCurrentBranchId(newBranch.id);
+    
+    const newTime = time + 60;
+    setTime(newTime);
+    const startCommit = {
+      id: `c-${Date.now() + Math.random()}`, x: newTime, y: newY, branchId: newBranch.id,
+      color: getBranchColor(type), type: 'start', parentId: parentBranch.headId
+    };
+    
+    setCommits(prev => [...prev, startCommit]);
+    
+    let guideT = `Branche ${type} créée`;
+    let guideD = `Vous travaillez maintenant sur une branche isolée.`;
+    if (type === 'release') guideD += " Utilisez cette branche pour stabiliser la version. Attention : en créer plusieurs en parallèle est risqué !";
+    
+    addLog(`git checkout -b ${branchName}`, `Created ${type} branch`, guideT, guideD);
+  };
+
+  const makeCommit = () => {
+    const currentB = branches.find(b => b.id === currentBranchId);
+    if (!currentB) return;
+    const newTime = time + 60;
+    setTime(newTime);
+    const newCommit = {
+      id: `c-${Date.now() + Math.random()}`, x: newTime, y: currentB.y, branchId: currentB.id,
+      color: getBranchColor(currentB.type), type: 'commit', parentId: currentB.headId
+    };
+    setCommits(prev => [...prev, newCommit]);
+    setBranches(prev => prev.map(b => b.id === currentB.id ? { ...b, headId: newCommit.id } : b));
+    addLog(`git commit -m "..."`, 'Commit added', "Commit standard", "L'unité de base de votre historique.");
+  };
+
+  const handleMerge = (targetBranchId) => {
+    if (conflictState) return;
+    const sourceB = branches.find(b => b.id === currentBranchId);
+    
+    let targetB = branches.find(b => b.id === targetBranchId);
+    if (!targetB) {
+       targetB = branches.find(b => b.id.includes(targetBranchId) || b.name === targetBranchId);
+    }
+
+    if (!sourceB || !targetB) return;
+
+    const isRiskyMerge = sourceB.type === 'feature' && targetB.id.includes('develop');
+    if (isRiskyMerge && Math.random() > 0.6) {
+      setConflictState({ source: sourceB, target: targetB });
+      addLog(`git merge ${sourceB.name}`, 'CONFLICT!', "Conflit de fusion", "Git ne peut pas fusionner automatiquement les changements. Vous devez résoudre les conflits manuellement.");
+      return;
+    }
+    executeMerge(sourceB, targetB);
+  };
+
+  const executeMerge = (sourceB, targetB) => {
+    const newTime = time + 60;
+    setTime(newTime);
+    const mergeCommit = {
+      id: `c-${Date.now() + Math.random()}`, x: newTime, y: targetB.y, branchId: targetB.id,
+      color: getBranchColor(targetB.type), type: 'merge',
+      parentId: targetB.headId, secondaryParentId: sourceB.headId
+    };
+    setCommits(prev => [...prev, mergeCommit]);
+    setBranches(prev => prev.map(b => b.id === targetB.id ? { ...b, headId: mergeCommit.id } : b));
+    setCurrentBranchId(targetB.id);
+    setConflictState(null);
+    addLog(`git merge ${sourceB.name}`, `Merged into ${targetB.name}`, "Fusion réussie", "Les historiques ont été réunis.");
+  };
+
+  const handleResolveConflict = () => {
+    if (!conflictState) return;
+    executeMerge(conflictState.source, conflictState.target);
+    addLog('git add . && git commit', 'Conflict resolved', "Conflit résolu", "Vous avez choisi manuellement quelles versions du code garder.");
+  };
+
+  const handleCherryPick = () => {
+    const newTime = time + 60;
+    setTime(newTime);
+    const current = branches.find(b => b.id === currentBranchId);
+    const cpCommit = {
+      id: `c-${Date.now() + Math.random()}`, x: newTime, y: current.y, branchId: current.id,
+      color: getBranchColor(current.type), type: 'cherry', parentId: current.headId
+    };
+    setCommits(prev => [...prev, cpCommit]);
+    setBranches(prev => prev.map(b => b.id === current.id ? { ...b, headId: cpCommit.id } : b));
+    addLog(`git cherry-pick <hash>`, 'Cherry-pick success', "Cherry-Pick", "Vous avez copié un commit spécifique d'une autre branche sans tout fusionner. Utile pour récupérer un fix précis.");
+  };
+
+  const renderExpertLine = (startCommit, endCommitId, isSecondary) => {
+    const endCommit = commits.find(c => c.id === endCommitId);
+    if (!endCommit) return null;
+    const isStraight = startCommit.y === endCommit.y;
+    const pathData = isStraight
+      ? `M ${endCommit.x} ${endCommit.y} L ${startCommit.x} ${startCommit.y}`
+      : `M ${endCommit.x} ${endCommit.y} C ${endCommit.x + 40} ${endCommit.y}, ${startCommit.x - 40} ${startCommit.y}, ${startCommit.x} ${startCommit.y}`;
+    return <path key={`line-${startCommit.id}-${endCommit.id}`} d={pathData} stroke={isSecondary ? endCommit.color : startCommit.color} strokeWidth={isSecondary ? "1.5" : "2.5"} strokeDasharray={isSecondary ? "3,3" : "0"} fill="none" opacity={isSecondary ? "0.6" : "0.9"} />;
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-8">
+      <div className="lg:col-span-3 flex flex-col bg-slate-950 rounded-xl shadow-2xl overflow-hidden border border-slate-800">
+        <div className="bg-slate-900 p-4 flex justify-between items-center border-b border-slate-800">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-rose-500">
+              <ShieldAlert size={20} />
+              <span className="font-mono font-bold tracking-wider">EXPERT LAB</span>
+            </div>
+            <div className="bg-slate-800 px-3 py-1 rounded border border-slate-700 flex items-center gap-2">
+              <GitBranch size={14} className="text-slate-400"/>
+              <select 
+                value={currentBranchId} 
+                onChange={(e) => setCurrentBranchId(e.target.value)}
+                className="bg-transparent text-sm font-mono outline-none text-blue-400 font-bold cursor-pointer"
+              >
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {conflictState && <div className="flex items-center gap-2 bg-red-500/20 text-red-400 px-3 py-1 rounded border border-red-500/50 animate-pulse text-xs font-bold"><AlertTriangle size={14} /> CONFLICT !</div>}
+            <button onClick={initExpertLab} className="text-slate-500 hover:text-white transition-colors"><RotateCcw size={16} /></button>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/50 p-2 border-b border-slate-800 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="flex flex-col gap-1 p-1">
+            <span className="text-[9px] text-slate-500 font-mono uppercase">Créer Branche</span>
+            <div className="flex gap-1">
+              <button onClick={() => createBranch('feature')} className="btn-icon-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/40" title="New Feature"><Plus size={14}/></button>
+              <button onClick={() => createBranch('release')} className="btn-icon-xs bg-green-500/20 text-green-400 hover:bg-green-500/40" title="New Release"><CheckCircle size={14}/></button>
+              <button onClick={() => createBranch('hotfix')} className="btn-icon-xs bg-orange-500/20 text-orange-400 hover:bg-orange-500/40" title="New Hotfix"><AlertCircle size={14}/></button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1 p-1">
+            <span className="text-[9px] text-slate-500 font-mono uppercase">Actions</span>
+            <div className="flex gap-1">
+              <button onClick={makeCommit} disabled={conflictState} className="btn-xs bg-blue-600 hover:bg-blue-500 w-full">Commit</button>
+              <button onClick={handleCherryPick} disabled={conflictState} className="btn-xs bg-slate-700 hover:bg-slate-600 w-full">🍒 Pick</button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1 p-1">
+            <span className="text-[9px] text-slate-500 font-mono uppercase">Merges</span>
+            <div className="flex gap-1">
+              <button onClick={() => handleMerge('develop')} disabled={conflictState || currentBranchId.includes('develop')} className="btn-xs bg-slate-700 hover:bg-slate-600 w-full">To Dev</button>
+              <button onClick={() => handleMerge('main')} disabled={conflictState || currentBranchId.includes('main')} className="btn-xs bg-slate-700 hover:bg-slate-600 w-full">To Main</button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1 p-1">
+            <span className="text-[9px] text-slate-500 font-mono uppercase">Urgence</span>
+            <div className="flex gap-1">
+              {conflictState ? (
+                <button onClick={handleResolveConflict} className="btn-xs bg-red-600 hover:bg-red-500 w-full animate-pulse text-white">RESOLVE</button>
+              ) : (
+                <div className="text-[10px] text-slate-600 flex items-center justify-center w-full bg-slate-800 rounded italic">Pas de conflit</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="relative h-[400px] overflow-x-auto bg-[#0a0a0a]" ref={scrollRef}>
+          <svg height="600" width={Math.max(800, time + 200)} className="absolute top-0 left-0 min-w-full">
+            {branches.map(b => (
+              <g key={b.id}>
+                <line x1="0" y1={b.y} x2="10000" y2={b.y} stroke="#334155" strokeWidth="1" strokeDasharray="4,4" opacity="0.2" />
+                <text x="10" y={b.y - 8} fill={getBranchColor(b.type)} fontSize="9" fontFamily="monospace" className="opacity-50">{b.name}</text>
+              </g>
+            ))}
+            {commits.map(commit => (
+              <React.Fragment key={`explines-${commit.id}`}>
+                {commit.parentId && renderExpertLine(commit, commit.parentId, false)}
+                {commit.secondaryParentId && renderExpertLine(commit, commit.secondaryParentId, true)}
+              </React.Fragment>
+            ))}
+            {commits.map((commit) => (
+              <g key={commit.id} transform={`translate(${commit.x}, ${commit.y})`}>
+                <circle r="5" fill="#0a0a0a" stroke={commit.color} strokeWidth="2" />
+                {commit.type === 'start' && <circle r="2" fill={commit.color} />}
+                {commit.type === 'cherry' && <circle r="2" fill="#fff" />}
+                {commit.tag && (
+                  <g transform="translate(0, -15)">
+                    <rect x="-18" y="-10" width="36" height="14" rx="2" fill="#334155" />
+                    <text x="0" y="0" textAnchor="middle" fill="#fff" fontSize="8">{commit.tag}</text>
+                  </g>
+                )}
+                {branches.find(b => b.headId === commit.id)?.id === currentBranchId && (
+                  <circle r="8" fill="none" stroke="white" strokeWidth="1" strokeDasharray="2,2" className="animate-spin-slow" />
+                )}
+              </g>
+            ))}
+          </svg>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-6">
+        <div className="bg-slate-900 border border-indigo-500/30 rounded-xl p-5 shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-10"><BookOpen size={64} className="text-indigo-500"/></div>
+          <h4 className="text-indigo-400 font-mono font-bold mb-2 flex items-center gap-2">
+            <Info size={16}/> {explanation.title}
+          </h4>
+          <p className="text-slate-300 text-sm leading-relaxed">
+            {explanation.text}
+          </p>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <h4 className="text-slate-500 text-xs font-mono uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Zap size={12} className="text-green-500" /> Capacités Débloquées
+          </h4>
+          <ul className="space-y-2 text-xs text-slate-400 font-mono">
+            <li className="flex items-center gap-2"><CheckSquare size={12} className="text-green-500"/> <span>Multi-branches simultanées</span></li>
+            <li className="flex items-center gap-2"><CheckSquare size={12} className="text-green-500"/> <span>Simulation de Conflits</span></li>
+            <li className="flex items-center gap-2"><CheckSquare size={12} className="text-green-500"/> <span>Cherry-picking</span></li>
+            <li className="flex items-center gap-2"><CheckSquare size={12} className="text-green-500"/> <span>Workflow Hotfix // Release</span></li>
+          </ul>
+        </div>
+
+        <div className="bg-black p-3 font-mono text-[10px] text-slate-500 h-48 overflow-y-auto border border-slate-800 rounded-xl">
+          <div className="flex items-center gap-2 mb-2 text-slate-600 uppercase">
+            <Terminal size={10} /> Expert Console
+          </div>
+          {messages.map(m => (
+            <div key={m.id} className="flex flex-col border-b border-slate-900/50 py-1">
+              <span className="text-yellow-600">$ {m.cmd}</span>
+              <span className="text-slate-500 pl-2"># {m.desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- TUTORIAL SECTION ---
+const TutorialSection = () => {
+  const [activeStep, setActiveStep] = useState(0);
+  
+  const steps = [
+    {
+      title: "Introduction",
+      icon: BookOpen,
+      content: (
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold text-white">Pourquoi Gitflow ?</h3>
+          <p className="text-slate-400">
+            Gitflow est un modèle de branchement strict conçu pour les projets avec des cycles de release planifiés. Il attribue des rôles spécifiques à différentes branches et définit comment elles doivent interagir.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+              <h4 className="font-bold text-green-400 mb-2">Avantages</h4>
+              <ul className="list-disc list-inside text-sm text-slate-400 space-y-1">
+                <li>Développement parallèle sans interférences</li>
+                <li>Collaboration structurée pour les grandes équipes</li>
+                <li>Gestion claire des versions (Hotfix vs Feature)</li>
+              </ul>
+            </div>
+            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+              <h4 className="font-bold text-red-400 mb-2">Inconvénients</h4>
+              <ul className="list-disc list-inside text-sm text-slate-400 space-y-1">
+                <li>Complexité accrue (trop de branches ?)</li>
+                <li>Pas idéal pour le déploiement continu (CI/CD)</li>
+                <li>Historique parfois difficile à lire</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Cycle de Vie",
+      icon: RefreshCw,
+      content: (
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold text-white">Le Cycle de Vie d'une Feature</h3>
+          <div className="relative border-l-2 border-slate-700 pl-6 ml-2 space-y-6">
+            <div className="relative">
+              <div className="absolute -left-[33px] bg-purple-500 rounded-full w-4 h-4 mt-1.5"></div>
+              <h4 className="font-bold text-purple-400">1. Création</h4>
+              <p className="text-sm text-slate-400">Départ depuis <code>develop</code>. La branche est isolée pour ne pas casser le code commun.</p>
+              <code className="block mt-2 bg-black p-2 rounded text-xs text-green-400 font-mono">git flow feature start login-page</code>
+            </div>
+            <div className="relative">
+              <div className="absolute -left-[33px] bg-blue-500 rounded-full w-4 h-4 mt-1.5"></div>
+              <h4 className="font-bold text-blue-400">2. Développement</h4>
+              <p className="text-sm text-slate-400">Commits réguliers. Tests locaux. Le travail avance sans impacter les autres.</p>
+            </div>
+            <div className="relative">
+              <div className="absolute -left-[33px] bg-green-500 rounded-full w-4 h-4 mt-1.5"></div>
+              <h4 className="font-bold text-green-400">3. Finalisation</h4>
+              <p className="text-sm text-slate-400">Fusion vers <code>develop</code>. La branche feature est supprimée.</p>
+              <code className="block mt-2 bg-black p-2 rounded text-xs text-green-400 font-mono">git flow feature finish login-page</code>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "GitHub & PR",
+      icon: Github,
+      content: (
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold text-white">L'Environnement GitHub</h3>
+          <p className="text-slate-400">
+            En équipe, on ne merge jamais directement en local. On passe par des <strong>Pull Requests (PR)</strong>.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex flex-col items-center text-center">
+              <GitPullRequest size={32} className="text-indigo-400 mb-3" />
+              <h4 className="font-bold text-white mb-2">Pull Request</h4>
+              <p className="text-xs text-slate-400">Une demande de fusion. "J'ai fini ma feature, pouvez-vous l'intégrer ?"</p>
+            </div>
+            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex flex-col items-center text-center">
+              <Users size={32} className="text-indigo-400 mb-3" />
+              <h4 className="font-bold text-white mb-2">Code Review</h4>
+              <p className="text-xs text-slate-400">Les collègues relisent le code, commentent et demandent des corrections avant validation.</p>
+            </div>
+            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex flex-col items-center text-center">
+              <Server size={32} className="text-indigo-400 mb-3" />
+              <h4 className="font-bold text-white mb-2">CI / Checks</h4>
+              <p className="text-xs text-slate-400">Des robots lancent les tests automatiques à chaque PR pour garantir la qualité.</p>
+            </div>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: "Commandes",
+      icon: Terminal,
+      content: (
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold text-white">Cheat Sheet Gitflow</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-400">
+              <thead className="text-slate-200 border-b border-slate-700">
+                <tr>
+                  <th className="py-2">Action</th>
+                  <th className="py-2">Commande Git Flow</th>
+                  <th className="py-2">Equivalent Git Standard</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono text-xs">
+                <tr className="border-b border-slate-800">
+                  <td className="py-2 font-sans">Initier</td>
+                  <td className="py-2 text-green-400">git flow init</td>
+                  <td className="py-2 text-slate-500">git init, git branch...</td>
+                </tr>
+                <tr className="border-b border-slate-800">
+                  <td className="py-2 font-sans">Start Feature</td>
+                  <td className="py-2 text-green-400">git flow feature start X</td>
+                  <td className="py-2 text-slate-500">git checkout -b feature/X develop</td>
+                </tr>
+                <tr className="border-b border-slate-800">
+                  <td className="py-2 font-sans">Finish Feature</td>
+                  <td className="py-2 text-green-400">git flow feature finish X</td>
+                  <td className="py-2 text-slate-500">git checkout develop, git merge...</td>
+                </tr>
+                <tr className="border-b border-slate-800">
+                  <td className="py-2 font-sans">Start Release</td>
+                  <td className="py-2 text-green-400">git flow release start 1.0</td>
+                  <td className="py-2 text-slate-500">git checkout -b release/1.0 develop</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )
+    }
+  ];
+
+  return (
+    <div id="tutorial" className="py-24 bg-slate-900 border-t border-slate-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-white mb-4">Tutoriel Complet</h2>
+          <p className="text-slate-400 max-w-2xl mx-auto">
+            Comprenez la théorie avant de passer à la pratique. Maîtrisez le cycle de vie complet et l'intégration avec GitHub.
+          </p>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-8">
+          {/* Navigation Latérale */}
+          <div className="md:w-1/4 flex flex-col gap-2">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <button
+                  key={index}
+                  onClick={() => setActiveStep(index)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${
+                    activeStep === index 
+                      ? 'bg-indigo-600 text-white shadow-lg' 
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Icon size={18} />
+                  {step.title}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Contenu Principal */}
+          <div className="md:w-3/4 bg-slate-950 border border-slate-800 rounded-2xl p-8 shadow-2xl min-h-[400px]">
+            {steps[activeStep].content}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Importation manquante pour RefreshCw dans le composant TutorialSection
+import { RefreshCw } from 'lucide-react';
+
+const ConceptSection = () => (
+  <div id="concept" className="py-24 bg-slate-900 border-t border-slate-800">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="text-center mb-16">
+        <h2 className="text-3xl font-bold text-white mb-4">Les 5 Piliers du Gitflow</h2>
+        <p className="text-slate-400 max-w-2xl mx-auto">
+          Gitflow n'est pas juste un outil, c'est une constitution. Chaque branche a un rôle, une durée de vie et des règles d'interaction précises.
+        </p>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <FeatureCard 
+          title="Master / Main" 
+          description="Le sanctuaire. Elle ne contient que du code de production stable. On n'y touche jamais directement, on y merge seulement."
+          icon={GitBranch}
+          color="text-red-500"
+        />
+        <FeatureCard 
+          title="Develop" 
+          description="La colonne vertébrale. C'est ici que l'histoire s'écrit au quotidien. Toutes les features partent d'ici et y reviennent."
+          icon={GitMerge}
+          color="text-blue-500"
+        />
+        <FeatureCard 
+          title="Feature Branches" 
+          description="Les chantiers temporaires. Pour chaque nouvelle fonctionnalité, on crée une branche isolée. Une fois finie, on la ferme."
+          icon={Plus}
+          color="text-purple-500"
+        />
+        <FeatureCard 
+          title="Release Branches" 
+          description="La zone de transit. Quand on est prêt à livrer, on gèle le code ici pour la stabilisation finale avant la production."
+          icon={CheckCircle}
+          color="text-green-500"
+        />
+        <FeatureCard 
+          title="Hotfix Branches" 
+          description="L'urgence vitale. Les seules branches autorisées à partir de Main pour corriger un bug critique en production immédiatement."
+          icon={AlertCircle}
+          color="text-orange-500"
+        />
+        <FeatureCard 
+          title="Tags & Versions" 
+          description="La mémoire. Chaque fusion vers Main crée un Tag (v1.0.0) pour marquer l'histoire et permettre les retours en arrière."
+          icon={Tag}
+          color="text-yellow-500"
+        />
+      </div>
+    </div>
+  </div>
+);
+
+const LabSection = () => (
+  <div id="lab" className="py-24 bg-slate-950 relative">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+            <Terminal className="text-green-500" /> Le Lab Interactif (Standard)
+          </h2>
+          <p className="text-slate-400">
+            Le mode guidé pour apprendre les bases. Sécurité maximale, impossible de se tromper.
+          </p>
+        </div>
+      </div>
+      <StandardGitflowVisualizer />
+    </div>
+  </div>
+);
+
+const ExpertLabSection = () => (
+  <div id="expert" className="bg-slate-950 border-t border-slate-800 py-12 relative overflow-hidden">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-8">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="bg-rose-900/20 p-2 rounded-lg border border-rose-700/50 shadow-lg">
+              <ShieldAlert className="text-rose-500" size={24} />
+            </div>
+            <h3 className="text-2xl font-bold text-white tracking-tight">Expert Laboratory</h3>
+          </div>
+          <p className="text-slate-400 max-w-xl">
+            Zone de vol libre. Gérez plusieurs branches en parallèle, résolvez des conflits de fusion et manipulez l'historique. <span className="text-rose-400 font-bold">Attention : Risque d'erreurs élevé.</span>
+          </p>
+        </div>
+      </div>
+      <AdvancedGitflowVisualizer />
+    </div>
+  </div>
+);
+
+const Footer = () => (
+  <footer className="bg-slate-950 border-t border-slate-800 py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
+      <div className="flex items-center gap-2">
+        <GitMerge className="text-indigo-500 opacity-50" size={24} />
+        <span className="text-slate-500 font-mono text-sm">© 2024 Gitflow Academy</span>
+      </div>
+      <div className="text-slate-600 text-sm">
+        Conçu pour les développeurs, par des développeurs. <span className="text-slate-800">|</span> <span className="font-mono">git reset --hard head</span>
+      </div>
+    </div>
+  </footer>
+);
+
+const FeatureCard = ({ title, description, icon: Icon, color }) => (
+  <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 hover:border-indigo-500/50 transition-all duration-300 group hover:-translate-y-1">
+    <div className={`w-12 h-12 rounded-lg bg-slate-900 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300 border border-slate-700`}>
+      <Icon className={color} size={24} />
+    </div>
+    <h3 className="text-xl font-bold text-slate-100 mb-2 font-mono">{title}</h3>
+    <p className="text-slate-400 text-sm leading-relaxed">{description}</p>
+  </div>
+);
+
+const Navbar = () => (
+  <nav className="fixed w-full z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="flex items-center justify-between h-16">
+        <div className="flex items-center gap-2">
+          <GitMerge className="text-indigo-500" size={28} />
+          <span className="text-white font-bold text-xl tracking-tight font-mono">Gitflow<span className="text-indigo-500">Academy</span></span>
+        </div>
+        <div className="hidden md:block">
+          <div className="ml-10 flex items-baseline space-x-8">
+            <a href="#concept" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Concept</a>
+            <a href="#tutorial" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Tutoriel</a>
+            <a href="#lab" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Le Lab</a>
+            <a href="#expert" className="text-rose-400 hover:text-rose-300 px-3 py-2 rounded-md text-sm font-bold transition-colors flex items-center gap-1"><ShieldAlert size={14}/> Lab Expert</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+);
+
+const Hero = () => (
+  <div className="relative pt-32 pb-20 sm:pt-40 sm:pb-24 overflow-hidden">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-mono mb-8">
+        <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+        v1.0.0 Stable Release
+      </div>
+      <h1 className="text-4xl sm:text-6xl font-extrabold text-white tracking-tight mb-8">
+        Maîtrisez le flux <br/>
+        <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Gitflow</span> sans douleur.
+      </h1>
+      <p className="mt-4 max-w-2xl mx-auto text-xl text-slate-400 mb-10 leading-relaxed">
+        Comprenez enfin comment gérer vos branches, releases et hotfix grâce à notre simulateur interactif. Plus de théorie abstraite, pratiquez le workflow standard de l'industrie.
+      </p>
+      <div className="flex justify-center gap-4">
+        <a href="#lab" className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-lg font-bold transition-all hover:shadow-lg hover:shadow-indigo-500/25 flex items-center gap-2">
+          Lancer le Simulateur <ArrowRight size={18} />
+        </a>
+        <a href="#tutorial" className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-8 py-3 rounded-lg font-bold transition-all border border-slate-700">
+          Apprendre d'abord
+        </a>
+      </div>
+    </div>
+    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full z-0 opacity-20 pointer-events-none">
+      <div className="absolute top-20 left-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+      <div className="absolute top-20 right-10 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+      <div className="absolute -bottom-8 left-1/2 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000"></div>
+    </div>
+  </div>
+);
+
+const App = () => {
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-indigo-500/30">
+      <style>{`
+        .btn-primary { @apply bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg hover:bg-indigo-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed; }
+        .btn-secondary { @apply bg-slate-800 text-slate-300 font-medium py-2 px-4 rounded-lg border border-slate-700 hover:bg-slate-700 transition-all active:scale-95; }
+        .btn-danger { @apply bg-red-900/20 text-red-400 font-medium py-2 px-4 rounded-lg border border-red-900/50 hover:bg-red-900/40 transition-all; }
+        .btn-xs { @apply px-2 py-1 text-[10px] rounded font-bold uppercase tracking-wider text-white transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed; }
+        .btn-icon-xs { @apply w-6 h-6 flex items-center justify-center rounded transition-all active:scale-95; }
+        .control-card { @apply bg-slate-800 p-4 rounded-xl border border-slate-700 transition-all duration-300; }
+        .control-card.active { @apply ring-1 ring-offset-2 ring-offset-slate-900; }
+        .card-header { @apply flex items-center gap-2 font-bold mb-1; }
+        @keyframes blob {
+          0% { transform: translate(0px, 0px) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+          100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob { animation: blob 7s infinite; }
+        .animation-delay-2000 { animation-delay: 2s; }
+        .animation-delay-4000 { animation-delay: 4s; }
+        .animate-spin-slow { animation: spin 3s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+      
+      <Navbar />
+      <Hero />
+      <ConceptSection />
+      <TutorialSection />
+      <LabSection />
+      <ExpertLabSection />
+      <Footer />
+    </div>
+  );
+};
+
+export default App;
