@@ -1,5 +1,5 @@
 import React from 'react';
-import { GitMerge, ShieldAlert } from 'lucide-react';
+import { GitMerge, ShieldAlert, Zap } from 'lucide-react';
 
 const Navbar = () => (
     <nav className="fixed w-full z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800">
@@ -10,11 +10,12 @@ const Navbar = () => (
                     <span className="text-white font-bold text-xl tracking-tight font-mono">Gitflow<span className="text-indigo-500">Academy</span></span>
                 </div>
                 <div className="hidden md:block">
-                    <div className="ml-10 flex items-baseline space-x-8">
+                    <div className="ml-10 flex items-baseline space-x-6">
                         <a href="#concept" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Concept</a>
                         <a href="#tutorial" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Tutoriel</a>
                         <a href="#lab" className="text-slate-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Le Lab</a>
-                        <a href="#expert" className="text-rose-400 hover:text-rose-300 px-3 py-2 rounded-md text-sm font-bold transition-colors flex items-center gap-1"><ShieldAlert size={14} /> Lab Expert</a>
+                        <a href="#expert" className="text-rose-400 hover:text-rose-300 px-3 py-2 rounded-md text-sm font-bold transition-colors flex items-center gap-1"><ShieldAlert size={14} /> Expert</a>
+                        <a href="#cicd" className="text-yellow-400 hover:text-yellow-300 px-3 py-2 rounded-md text-sm font-bold transition-colors flex items-center gap-1"><Zap size={14} /> CI/CD</a>
                     </div>
                 </div>
             </div>

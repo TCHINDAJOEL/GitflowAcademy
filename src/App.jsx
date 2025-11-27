@@ -5,6 +5,9 @@ import ConceptSection from './components/ConceptSection';
 import TutorialSection from './components/TutorialSection';
 import LabSection from './components/LabSection';
 import ExpertLabSection from './components/ExpertLabSection';
+import CICDSection from './components/CICDSection';
+import GitflowVsTrunkComparison from './components/GitflowVsTrunkComparison';
+import AdvancedCICDConcepts from './components/AdvancedCICDConcepts';
 import Footer from './components/Footer';
 
 const App = () => {
@@ -16,6 +19,9 @@ const App = () => {
       <TutorialSection />
       <LabSection />
       <ExpertLabSection />
+      <CICDSection />
+      <GitflowVsTrunkComparison />
+      <AdvancedCICDConcepts />
       <Footer />
     </div>
   );
